@@ -1,0 +1,977 @@
+blueprint:
+  name: "☢️ Nuclear Radiation Safety Monitor / مراقب سلامة الإشعاع النووي"
+  description: |
+    **Version:** 1.0.0
+    **Developer:** Abdulla Aldhaen
+
+    ## How it works
+    - 🟢 Green: below the yellow threshold.
+    - 🟡 Yellow: the reading must remain in the yellow zone for the selected confirmation time.
+    - 🔴 Red: the reading must remain at or above the red threshold for the selected confirmation time.
+    - 📱 Sends notifications to selected Notify entities.
+    - 🚨 Supports an optional iPhone emergency/critical action for confirmed red alerts.
+    - 🏠 Supports Home Assistant persistent notifications.
+    - 🔊 Supports Alexa Speak/Announce Notify entities.
+    - 🗣️ Supports Google Home / Nest through a selected TTS engine.
+    - 🌙 Optional quiet hours for voice announcements; red alerts may bypass them.
+    - 🔁 Optional repeated red reminders while the reading remains red.
+    - 🌐 Alert text follows the selected Arabic or English language.
+
+    ## طريقة العمل
+    - 🟢 الأخضر: القراءة أقل من بداية المنطقة الصفراء.
+    - 🟡 الأصفر: يجب أن تستمر القراءة داخل المنطقة الصفراء طوال مدة التأكيد المحددة.
+    - 🔴 الأحمر: يجب أن تستمر القراءة عند بداية المنطقة الحمراء أو أعلى طوال مدة التأكيد المحددة.
+    - 📱 يرسل التنبيهات إلى كيانات Notify التي تختارها.
+    - 🚨 يدعم إجراء طوارئ/تنبيه حرج اختياري للآيفون بعد تأكيد المنطقة الحمراء.
+    - 🏠 يدعم إشعاراً دائماً داخل Home Assistant.
+    - 🔊 يدعم Alexa Speak/Announce.
+    - 🗣️ يدعم Google Home / Nest عن طريق محرك TTS تختاره.
+    - 🌙 يدعم ساعات هدوء اختيارية للتنبيهات الصوتية مع إمكانية تجاوز الأحمر لها.
+    - 🔁 يمكن إعادة تنبيه الأحمر دورياً طالما بقيت القراءة في المنطقة الحمراء.
+    - 🌐 نصوص التنبيه تتبع اللغة العربية أو الإنجليزية التي تختارها.
+
+    ## Developer notes / نصائح المطور
+    - ☢️ Intended for radiation dose-rate sensors, commonly shown as **µSv/h**.
+      مخصص لمستشعرات معدل الجرعة الإشعاعية، وغالباً تكون الوحدة **µSv/h**.
+    - ⚠️ Yellow/red values are automation alert thresholds, **not universal medical or regulatory safety limits**.
+      قيم الأصفر والأحمر هي حدود تنبيه للأتمتة وليست حدود أمان طبية أو تنظيمية عالمية.
+    - 📚 Accumulated dose such as mSv/year is not the same as an instantaneous µSv/h reading.
+      الجرعة التراكمية مثل mSv/year ليست نفس القراءة اللحظية µSv/h.
+    - 🏠 For stable indoor monitoring, keep the detector in a fixed dry location around 1–1.5 m above the floor and away from heat, moisture, tampering, and strong electrical interference.
+      للمراقبة الداخلية المستقرة، يفضل وضع المستشعر في مكان ثابت وجاف على ارتفاع تقريبي 1–1.5 متر عن الأرض وبعيداً عن الحرارة والرطوبة والعبث والتشويش الكهربائي القوي.
+    - 🌦️ Outdoor monitoring should use a detector/enclosure suitable for outdoor conditions.
+      للمراقبة الخارجية استخدم مستشعراً أو صندوق حماية مناسباً للعوامل الجوية.
+
+  domain: automation
+  author: "Abdulla Aldhaen"
+  homeassistant:
+    min_version: "2026.8.0"
+
+  input:
+    general:
+      name: "⚙️ General / الإعدادات العامة"
+      icon: mdi:cog
+      input:
+        language:
+          name: "🌐 Language / اللغة"
+          description: |
+            Select the language for all text and voice alerts.
+            اختر لغة جميع التنبيهات النصية والصوتية.
+          default: ar
+          selector:
+            language:
+              languages:
+                - en
+                - ar
+              native_name: true
+              no_sort: true
+
+        radiation_sensor:
+          name: "☢️ Radiation Sensor / مستشعر الإشعاع"
+          description: |
+            Select the radiation dose-rate sensor. Defaults below assume µSv/h.
+            اختر مستشعر معدل الجرعة الإشعاعية. القيم الافتراضية أدناه تفترض وحدة µSv/h.
+          default: sensor.nuclear_radiation_detector_2
+          selector:
+            entity:
+              filter:
+                - domain: sensor
+
+    zones:
+      name: "☢️ Zones & Confirmation / المناطق ومدة التأكيد"
+      icon: mdi:radioactive
+      input:
+        yellow_threshold:
+          name: "🟡 Yellow Zone Start / بداية المنطقة الصفراء"
+          description: |
+            Developer default: 0.30. Automation threshold only; not a universal safety limit.
+            القيمة الافتراضية للمطور: 0.30. حد للأتمتة فقط وليس حد أمان عالمي.
+          default: 0.30
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 0.01
+              mode: box
+
+        yellow_confirmation_seconds:
+          name: "⏱️ Yellow Confirmation Time / مدة تأكيد المنطقة الصفراء"
+          description: |
+            Reading must remain in yellow for this many seconds before the alert. Developer default: 5 s.
+            يجب أن تبقى القراءة في الأصفر لهذه المدة قبل التنبيه. افتراضي المطور: 5 ثوانٍ.
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 600
+              step: 1
+              unit_of_measurement: s
+              mode: box
+
+        red_threshold:
+          name: "🔴 Red Zone Start / بداية المنطقة الحمراء"
+          description: |
+            Developer default: 0.50. Automation threshold only; not a universal safety limit.
+            القيمة الافتراضية للمطور: 0.50. حد للأتمتة فقط وليس حد أمان عالمي.
+          default: 0.50
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 0.01
+              mode: box
+
+        red_confirmation_seconds:
+          name: "⏱️ Red Confirmation Time / مدة تأكيد المنطقة الحمراء"
+          description: |
+            Reading must remain at or above red continuously for this many seconds. If it drops below red first, no red alert is sent. Developer default: 5 s.
+            يجب أن تبقى القراءة عند الأحمر أو أعلى بشكل متواصل لهذه المدة. إذا نزلت قبل اكتمالها فلن يرسل التنبيه الأحمر. افتراضي المطور: 5 ثوانٍ.
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 600
+              step: 1
+              unit_of_measurement: s
+              mode: box
+
+        green_confirmation_seconds:
+          name: "🟢 Safe Return Confirmation / مدة تأكيد العودة للأخضر"
+          description: |
+            Time below yellow before sending the safe-return notification.
+            المدة تحت حد الأصفر قبل إرسال إشعار العودة للوضع الآمن.
+          default: 10
+          selector:
+            number:
+              min: 0
+              max: 600
+              step: 1
+              unit_of_measurement: s
+              mode: box
+
+    notifications:
+      name: "📱 Notifications / التنبيهات"
+      icon: mdi:bell
+      input:
+        notification_entities:
+          name: "📱 Phones & Notify Devices / الهواتف وأجهزة التنبيه"
+          description: |
+            Select one or more Notify entities. Select each person's phone here if you want them to receive alerts.
+            اختر كيان Notify واحداً أو أكثر، واختر هاتف كل شخص تريد أن يصله التنبيه.
+          default: []
+          selector:
+            entity:
+              multiple: true
+              filter:
+                - domain: notify
+
+        home_assistant_notification:
+          name: "🏠 Home Assistant Notification / إشعار Home Assistant"
+          description: |
+            Show/update a persistent Home Assistant notification.
+            عرض أو تحديث إشعار دائم داخل Home Assistant.
+          default: true
+          selector:
+            boolean:
+
+        notify_on_green:
+          name: "✅ Safe Return Notification / إشعار العودة للوضع الآمن"
+          description: |
+            Notify when the reading returns to green after yellow/red.
+            إرسال إشعار عند رجوع القراءة إلى الأخضر بعد الأصفر/الأحمر.
+          default: true
+          selector:
+            boolean:
+
+    iphone_emergency:
+      name: "🚨 iPhone Emergency / طوارئ الآيفون"
+      icon: mdi:cellphone-sound
+      collapsed: true
+      input:
+        critical_iphone_actions:
+          name: "📱 Emergency iPhone Action / إجراء طوارئ الآيفون"
+          description: |
+            Optional. Add the Home Assistant Mobile App notification action for the iPhone(s) that should receive the confirmed RED alert.
+            Use {{ alert_title }} for Title and {{ alert_message }} for Message. For an iOS Critical Alert, configure Push sound with critical: 1 and volume: 1.0.
+
+            اختياري. أضف إجراء إشعار تطبيق Home Assistant للآيفون/الآيفونات التي تريد أن تستقبل تحذير الأحمر المؤكد.
+            استخدم {{ alert_title }} للعنوان و{{ alert_message }} للرسالة. للتنبيه الحرج في iOS اجعل Push sound يحتوي critical: 1 و volume: 1.0.
+          default: []
+          selector:
+            action:
+
+    voice:
+      name: "🔊 Voice Announcements / التنبيهات الصوتية"
+      icon: mdi:account-voice
+      collapsed: true
+      input:
+        voice_enabled:
+          name: "🔊 Enable Voice / تفعيل الصوت"
+          default: false
+          selector:
+            boolean:
+
+        alexa_notify_entities:
+          name: "🔊 Alexa Speak/Announce / أجهزة أليكسا"
+          description: |
+            Select Alexa Speak or Announce Notify entities.
+            اختر كيانات Alexa Speak أو Announce.
+          default: []
+          selector:
+            entity:
+              multiple: true
+              filter:
+                - domain: notify
+
+        tts_target:
+          name: "🗣️ TTS Engine / محرك تحويل النص إلى صوت"
+          description: |
+            Select the TTS target used for Google Home / Nest.
+            اختر محرك TTS المستخدم لسماعات Google Home / Nest.
+          default: {}
+          selector:
+            target:
+              entity:
+                - domain: tts
+
+        google_home_players:
+          name: "🔈 Google Home / Nest Speakers / سماعات Google Home"
+          description: |
+            Select one or more media players.
+            اختر سماعة أو أكثر.
+          default: []
+          selector:
+            entity:
+              multiple: true
+              filter:
+                - domain: media_player
+
+        english_tts_language:
+          name: "English TTS Language / لغة TTS الإنجليزية"
+          default: "en"
+          selector:
+            text:
+
+        arabic_tts_language:
+          name: "Arabic TTS Language / لغة TTS العربية"
+          description: |
+            Default: ar. If your TTS engine supports ar-BH you may use it.
+            الافتراضي: ar. إذا كان محرك TTS يدعم ar-BH يمكنك استخدامه.
+          default: "ar"
+          selector:
+            text:
+
+    quiet_hours:
+      name: "🌙 Quiet Hours / ساعات الهدوء"
+      icon: mdi:weather-night
+      collapsed: true
+      input:
+        quiet_hours_enabled:
+          name: "🌙 Enable Quiet Hours / تفعيل ساعات الهدوء"
+          default: false
+          selector:
+            boolean:
+
+        quiet_start:
+          name: "Quiet Start / بداية الهدوء"
+          default: "22:00:00"
+          selector:
+            time:
+
+        quiet_end:
+          name: "Quiet End / نهاية الهدوء"
+          default: "07:00:00"
+          selector:
+            time:
+
+        red_bypasses_quiet_hours:
+          name: "🚨 Red Bypasses Quiet Hours / الأحمر يتجاوز ساعات الهدوء"
+          description: |
+            Allow Alexa/Google Home to announce confirmed red alerts during quiet hours.
+            السماح لأليكسا وGoogle Home بقراءة تحذير الأحمر المؤكد أثناء ساعات الهدوء.
+          default: true
+          selector:
+            boolean:
+
+    repeat_red:
+      name: "🔁 Red Reminder / تكرار تنبيه الأحمر"
+      icon: mdi:repeat
+      collapsed: true
+      input:
+        repeat_red_alert:
+          name: "🔁 Repeat Red Alert / إعادة تنبيه الأحمر"
+          default: true
+          selector:
+            boolean:
+
+        red_repeat_minutes:
+          name: "⏱️ Repeat Every / التكرار كل"
+          description: |
+            Repeat normal red alerts while reading stays red. The iPhone critical action is not repeated.
+            إعادة التنبيه الأحمر العادي طالما بقيت القراءة حمراء. إجراء الآيفون الحرج لا يتكرر.
+          default: 5
+          selector:
+            number:
+              min: 1
+              max: 120
+              step: 1
+              unit_of_measurement: min
+              mode: box
+
+    testing:
+      name: "🧪 Test / الاختبار"
+      icon: mdi:test-tube
+      collapsed: true
+      input:
+        manual_test_enabled:
+          name: "🧪 Enable Manual Test / تفعيل الاختبار اليدوي"
+          description: |
+            Enable, choose a test zone below, then use Run actions on the created automation.
+            فعّل الخيار واختر منطقة الاختبار ثم استخدم Run actions في الأتمتة المنشأة.
+          default: false
+          selector:
+            boolean:
+
+        manual_test_zone:
+          name: "Test Zone / منطقة الاختبار"
+          default: yellow
+          selector:
+            select:
+              mode: dropdown
+              options:
+                - label: "🟡 Yellow / أصفر"
+                  value: yellow
+                - label: "🔴 Red / أحمر"
+                  value: red
+                - label: "🟢 Green / أخضر"
+                  value: green
+
+variables:
+  radiation_sensor: !input radiation_sensor
+  language: !input language
+  yellow_threshold: !input yellow_threshold
+  red_threshold: !input red_threshold
+  notification_entities: !input notification_entities
+  home_assistant_notification: !input home_assistant_notification
+  notify_on_green: !input notify_on_green
+  voice_enabled: !input voice_enabled
+  alexa_notify_entities: !input alexa_notify_entities
+  tts_target: !input tts_target
+  google_home_players: !input google_home_players
+  english_tts_language: !input english_tts_language
+  arabic_tts_language: !input arabic_tts_language
+  quiet_hours_enabled: !input quiet_hours_enabled
+  quiet_start: !input quiet_start
+  quiet_end: !input quiet_end
+  red_bypasses_quiet_hours: !input red_bypasses_quiet_hours
+  repeat_red_alert: !input repeat_red_alert
+  manual_test_enabled: !input manual_test_enabled
+  manual_test_zone: !input manual_test_zone
+
+triggers:
+  - trigger: state
+    entity_id: !input radiation_sensor
+    id: radiation_state_changed
+
+conditions:
+  - condition: template
+    alias: "Validate thresholds / التحقق من الحدود"
+    value_template: >-
+      {{ (yellow_threshold | float) < (red_threshold | float) }}
+
+actions:
+  - variables:
+      manual_run: >-
+        {{ trigger is not defined }}
+      old_raw: >-
+        {% if trigger is defined and trigger.from_state is not none %}
+          {{ trigger.from_state.state }}
+        {% else %}
+          unknown
+        {% endif %}
+      new_raw: >-
+        {% if trigger is defined and trigger.to_state is not none %}
+          {{ trigger.to_state.state }}
+        {% else %}
+          {{ states(radiation_sensor) }}
+        {% endif %}
+      old_valid: >-
+        {{ is_number(old_raw) }}
+      new_valid: >-
+        {{ is_number(new_raw) }}
+      old_value: >-
+        {{ old_raw | float(0) }}
+      new_value: >-
+        {{ new_raw | float(0) }}
+      unit: >-
+        {{ state_attr(radiation_sensor, 'unit_of_measurement') or 'µSv/h' }}
+
+  - variables:
+      old_zone: >-
+        {% if not (old_valid | bool) %}
+          unknown
+        {% elif (old_value | float) >= (red_threshold | float) %}
+          red
+        {% elif (old_value | float) >= (yellow_threshold | float) %}
+          yellow
+        {% else %}
+          green
+        {% endif %}
+      new_zone: >-
+        {% if not (new_valid | bool) %}
+          unknown
+        {% elif (new_value | float) >= (red_threshold | float) %}
+          red
+        {% elif (new_value | float) >= (yellow_threshold | float) %}
+          yellow
+        {% else %}
+          green
+        {% endif %}
+
+  - choose:
+      # MANUAL TEST
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ manual_run | bool and manual_test_enabled | bool }}
+        sequence:
+          - variables:
+              alert_title: >-
+                {% if manual_test_zone == 'red' %}
+                  {{ '🚨 اختبار تحذير الإشعاع - المنطقة الحمراء' if language == 'ar' else '🚨 Radiation Warning Test - Red Zone' }}
+                {% elif manual_test_zone == 'green' %}
+                  {{ '✅ اختبار العودة للمنطقة الخضراء' if language == 'ar' else '✅ Safe Return Test - Green Zone' }}
+                {% else %}
+                  {{ '⚠️ اختبار تنبيه الإشعاع - المنطقة الصفراء' if language == 'ar' else '⚠️ Radiation Alert Test - Yellow Zone' }}
+                {% endif %}
+              alert_message: >-
+                {% if language == 'ar' %}
+                  هذا اختبار يدوي لبلو برنت مراقبة الإشعاع. منطقة الاختبار: {{ manual_test_zone }}. القراءة الحالية: {{ states(radiation_sensor) }} {{ unit }}.
+                {% else %}
+                  This is a manual test of the Nuclear Radiation Safety Monitor blueprint. Test zone: {{ manual_test_zone }}. Current reading: {{ states(radiation_sensor) }} {{ unit }}.
+                {% endif %}
+              tts_language: >-
+                {{ arabic_tts_language if language == 'ar' else english_tts_language }}
+
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ home_assistant_notification | bool }}
+            then:
+              - action: notify.persistent_notification
+                data:
+                  title: "{{ alert_title }}"
+                  message: "{{ alert_message }}"
+                  data:
+                    notification_id: nuclear_radiation_safety_monitor
+
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ notification_entities | length > 0 }}
+            then:
+              - action: notify.send_message
+                continue_on_error: true
+                target:
+                  entity_id: !input notification_entities
+                data:
+                  title: "{{ alert_title }}"
+                  message: "{{ alert_message }}"
+
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ manual_test_zone == 'red' }}
+            then:
+              - choose:
+                  - conditions:
+                      - condition: template
+                        value_template: "{{ true }}"
+                    sequence: !input critical_iphone_actions
+
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ voice_enabled | bool }}
+            then:
+              - if:
+                  - condition: template
+                    value_template: >-
+                      {{ alexa_notify_entities | length > 0 }}
+                then:
+                  - action: notify.send_message
+                    continue_on_error: true
+                    target:
+                      entity_id: !input alexa_notify_entities
+                    data:
+                      message: "{{ alert_message }}"
+              - if:
+                  - condition: template
+                    value_template: >-
+                      {{ google_home_players | length > 0 and tts_target | length > 0 }}
+                then:
+                  - repeat:
+                      for_each: !input google_home_players
+                      sequence:
+                        - action: tts.speak
+                          continue_on_error: true
+                          target: !input tts_target
+                          data:
+                            media_player_entity_id: "{{ repeat.item }}"
+                            message: "{{ alert_message }}"
+                            language: "{{ tts_language }}"
+
+      # YELLOW
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ not (manual_run | bool) and new_zone | trim == 'yellow' and old_zone | trim != 'yellow' }}
+        sequence:
+          - delay:
+              seconds: !input yellow_confirmation_seconds
+          - condition: template
+            value_template: >-
+              {% set v = states(radiation_sensor) %}
+              {{ is_number(v) and (v | float) >= (yellow_threshold | float) and (v | float) < (red_threshold | float) }}
+          - variables:
+              confirmed_value: >-
+                {{ states(radiation_sensor) | float(0) }}
+              reading_text: >-
+                {{ states(radiation_sensor) | float(0) | round(3) }} {{ unit }}
+              direction_ar: >-
+                {% if (confirmed_value | float) > (new_value | float) %}
+                  يرتفع 📈
+                {% elif (confirmed_value | float) < (new_value | float) %}
+                  ينخفض 📉
+                {% elif (new_value | float) > (old_value | float) %}
+                  يرتفع 📈
+                {% elif (new_value | float) < (old_value | float) %}
+                  ينخفض 📉
+                {% else %}
+                  ثابت ➡️
+                {% endif %}
+              direction_en: >-
+                {% if (confirmed_value | float) > (new_value | float) %}
+                  rising 📈
+                {% elif (confirmed_value | float) < (new_value | float) %}
+                  falling 📉
+                {% elif (new_value | float) > (old_value | float) %}
+                  rising 📈
+                {% elif (new_value | float) < (old_value | float) %}
+                  falling 📉
+                {% else %}
+                  stable ➡️
+                {% endif %}
+              alert_title: >-
+                {{ '⚠️ تنبيه إشعاع - المنطقة الصفراء' if language == 'ar' else '⚠️ Radiation Alert - Yellow Zone' }}
+              alert_message: >-
+                {% if language == 'ar' %}
+                  يرجى العلم، وصلت قراءة الإشعاع إلى {{ reading_text }}. القراءة الآن في المنطقة الصفراء بعد اكتمال مدة التأكيد. اتجاه القراءة: {{ direction_ar | trim }}. يرجى اتباع الإرشادات الحكومية.
+                {% else %}
+                  Radiation reading reached {{ reading_text }}. The reading is now in the yellow zone after the confirmation time. Trend: {{ direction_en | trim }}. Please follow official government guidance.
+                {% endif %}
+              tts_language: >-
+                {{ arabic_tts_language if language == 'ar' else english_tts_language }}
+              quiet_now: >-
+                {% if not (quiet_hours_enabled | bool) %}
+                  false
+                {% else %}
+                  {% set current = now().strftime('%H:%M:%S') %}
+                  {% set start = (quiet_start | string)[0:8] %}
+                  {% set finish = (quiet_end | string)[0:8] %}
+                  {% if start < finish %}
+                    {{ start <= current < finish }}
+                  {% else %}
+                    {{ current >= start or current < finish }}
+                  {% endif %}
+                {% endif %}
+
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ home_assistant_notification | bool }}
+            then:
+              - action: notify.persistent_notification
+                data:
+                  title: "{{ alert_title }}"
+                  message: "{{ alert_message }}"
+                  data:
+                    notification_id: nuclear_radiation_safety_monitor
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ notification_entities | length > 0 }}
+            then:
+              - action: notify.send_message
+                continue_on_error: true
+                target:
+                  entity_id: !input notification_entities
+                data:
+                  title: "{{ alert_title }}"
+                  message: "{{ alert_message }}"
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ voice_enabled | bool and not (quiet_now | bool) }}
+            then:
+              - if:
+                  - condition: template
+                    value_template: >-
+                      {{ alexa_notify_entities | length > 0 }}
+                then:
+                  - action: notify.send_message
+                    continue_on_error: true
+                    target:
+                      entity_id: !input alexa_notify_entities
+                    data:
+                      message: "{{ alert_message }}"
+              - if:
+                  - condition: template
+                    value_template: >-
+                      {{ google_home_players | length > 0 and tts_target | length > 0 }}
+                then:
+                  - repeat:
+                      for_each: !input google_home_players
+                      sequence:
+                        - action: tts.speak
+                          continue_on_error: true
+                          target: !input tts_target
+                          data:
+                            media_player_entity_id: "{{ repeat.item }}"
+                            message: "{{ alert_message }}"
+                            language: "{{ tts_language }}"
+
+      # RED
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ not (manual_run | bool) and new_zone | trim == 'red' and old_zone | trim != 'red' }}
+        sequence:
+          - delay:
+              seconds: !input red_confirmation_seconds
+          - condition: template
+            value_template: >-
+              {% set v = states(radiation_sensor) %}
+              {{ is_number(v) and (v | float) >= (red_threshold | float) }}
+          - variables:
+              confirmed_value: >-
+                {{ states(radiation_sensor) | float(0) }}
+              reading_text: >-
+                {{ states(radiation_sensor) | float(0) | round(3) }} {{ unit }}
+              direction_ar: >-
+                {% if (confirmed_value | float) > (new_value | float) %}
+                  يرتفع 📈
+                {% elif (confirmed_value | float) < (new_value | float) %}
+                  ينخفض 📉
+                {% elif (new_value | float) > (old_value | float) %}
+                  يرتفع 📈
+                {% elif (new_value | float) < (old_value | float) %}
+                  ينخفض 📉
+                {% else %}
+                  ثابت ➡️
+                {% endif %}
+              direction_en: >-
+                {% if (confirmed_value | float) > (new_value | float) %}
+                  rising 📈
+                {% elif (confirmed_value | float) < (new_value | float) %}
+                  falling 📉
+                {% elif (new_value | float) > (old_value | float) %}
+                  rising 📈
+                {% elif (new_value | float) < (old_value | float) %}
+                  falling 📉
+                {% else %}
+                  stable ➡️
+                {% endif %}
+              alert_title: >-
+                {{ '🚨 تحذير إشعاع - المنطقة الحمراء' if language == 'ar' else '🚨 Radiation Warning - Red Zone' }}
+              alert_message: >-
+                {% if language == 'ar' %}
+                  تحذير: وصلت قراءة الإشعاع إلى {{ reading_text }}. استمرت القراءة عند {{ red_threshold | round(3) }} {{ unit }} أو أعلى طوال مدة التأكيد المحددة. اتجاه القراءة: {{ direction_ar | trim }}. يرجى اتباع الإرشادات الحكومية.
+                {% else %}
+                  Warning: radiation reading reached {{ reading_text }}. The reading remained at or above {{ red_threshold | round(3) }} {{ unit }} for the configured confirmation time. Trend: {{ direction_en | trim }}. Please follow official government guidance.
+                {% endif %}
+              tts_language: >-
+                {{ arabic_tts_language if language == 'ar' else english_tts_language }}
+              quiet_now: >-
+                {% if not (quiet_hours_enabled | bool) %}
+                  false
+                {% else %}
+                  {% set current = now().strftime('%H:%M:%S') %}
+                  {% set start = (quiet_start | string)[0:8] %}
+                  {% set finish = (quiet_end | string)[0:8] %}
+                  {% if start < finish %}
+                    {{ start <= current < finish }}
+                  {% else %}
+                    {{ current >= start or current < finish }}
+                  {% endif %}
+                {% endif %}
+
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ home_assistant_notification | bool }}
+            then:
+              - action: notify.persistent_notification
+                data:
+                  title: "{{ alert_title }}"
+                  message: "{{ alert_message }}"
+                  data:
+                    notification_id: nuclear_radiation_safety_monitor
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ notification_entities | length > 0 }}
+            then:
+              - action: notify.send_message
+                continue_on_error: true
+                target:
+                  entity_id: !input notification_entities
+                data:
+                  title: "{{ alert_title }}"
+                  message: "{{ alert_message }}"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ true }}"
+                sequence: !input critical_iphone_actions
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ voice_enabled | bool and (not (quiet_now | bool) or red_bypasses_quiet_hours | bool) }}
+            then:
+              - if:
+                  - condition: template
+                    value_template: >-
+                      {{ alexa_notify_entities | length > 0 }}
+                then:
+                  - action: notify.send_message
+                    continue_on_error: true
+                    target:
+                      entity_id: !input alexa_notify_entities
+                    data:
+                      message: "{{ alert_message }}"
+              - if:
+                  - condition: template
+                    value_template: >-
+                      {{ google_home_players | length > 0 and tts_target | length > 0 }}
+                then:
+                  - repeat:
+                      for_each: !input google_home_players
+                      sequence:
+                        - action: tts.speak
+                          continue_on_error: true
+                          target: !input tts_target
+                          data:
+                            media_player_entity_id: "{{ repeat.item }}"
+                            message: "{{ alert_message }}"
+                            language: "{{ tts_language }}"
+
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ repeat_red_alert | bool }}
+            then:
+              - repeat:
+                  while:
+                    - condition: template
+                      value_template: >-
+                        {% set v = states(radiation_sensor) %}
+                        {{ is_number(v) and (v | float) >= (red_threshold | float) }}
+                  sequence:
+                    - delay:
+                        minutes: !input red_repeat_minutes
+                    - condition: template
+                      value_template: >-
+                        {% set v = states(radiation_sensor) %}
+                        {{ is_number(v) and (v | float) >= (red_threshold | float) }}
+                    - variables:
+                        repeat_reading_text: >-
+                          {{ states(radiation_sensor) | float(0) | round(3) }} {{ unit }}
+                        repeat_title: >-
+                          {{ '🚨 استمرار التحذير الإشعاعي' if language == 'ar' else '🚨 Radiation Warning Continues' }}
+                        repeat_message: >-
+                          {% if language == 'ar' %}
+                            ما زالت قراءة الإشعاع في المنطقة الحمراء. القراءة الحالية: {{ repeat_reading_text }}. يرجى متابعة الإرشادات الحكومية.
+                          {% else %}
+                            The radiation reading remains in the red zone. Current reading: {{ repeat_reading_text }}. Please continue to follow official government guidance.
+                          {% endif %}
+                        repeat_tts_language: >-
+                          {{ arabic_tts_language if language == 'ar' else english_tts_language }}
+                        repeat_quiet_now: >-
+                          {% if not (quiet_hours_enabled | bool) %}
+                            false
+                          {% else %}
+                            {% set current = now().strftime('%H:%M:%S') %}
+                            {% set start = (quiet_start | string)[0:8] %}
+                            {% set finish = (quiet_end | string)[0:8] %}
+                            {% if start < finish %}
+                              {{ start <= current < finish }}
+                            {% else %}
+                              {{ current >= start or current < finish }}
+                            {% endif %}
+                          {% endif %}
+                    - if:
+                        - condition: template
+                          value_template: >-
+                            {{ home_assistant_notification | bool }}
+                      then:
+                        - action: notify.persistent_notification
+                          data:
+                            title: "{{ repeat_title }}"
+                            message: "{{ repeat_message }}"
+                            data:
+                              notification_id: nuclear_radiation_safety_monitor
+                    - if:
+                        - condition: template
+                          value_template: >-
+                            {{ notification_entities | length > 0 }}
+                      then:
+                        - action: notify.send_message
+                          continue_on_error: true
+                          target:
+                            entity_id: !input notification_entities
+                          data:
+                            title: "{{ repeat_title }}"
+                            message: "{{ repeat_message }}"
+                    - if:
+                        - condition: template
+                          value_template: >-
+                            {{ voice_enabled | bool and (not (repeat_quiet_now | bool) or red_bypasses_quiet_hours | bool) }}
+                      then:
+                        - if:
+                            - condition: template
+                              value_template: >-
+                                {{ alexa_notify_entities | length > 0 }}
+                          then:
+                            - action: notify.send_message
+                              continue_on_error: true
+                              target:
+                                entity_id: !input alexa_notify_entities
+                              data:
+                                message: "{{ repeat_message }}"
+                        - if:
+                            - condition: template
+                              value_template: >-
+                                {{ google_home_players | length > 0 and tts_target | length > 0 }}
+                          then:
+                            - repeat:
+                                for_each: !input google_home_players
+                                sequence:
+                                  - action: tts.speak
+                                    continue_on_error: true
+                                    target: !input tts_target
+                                    data:
+                                      media_player_entity_id: "{{ repeat.item }}"
+                                      message: "{{ repeat_message }}"
+                                      language: "{{ repeat_tts_language }}"
+
+      # GREEN / SAFE RETURN
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ not (manual_run | bool) and new_zone | trim == 'green' and old_zone | trim in ['yellow', 'red'] and notify_on_green | bool }}
+        sequence:
+          - delay:
+              seconds: !input green_confirmation_seconds
+          - condition: template
+            value_template: >-
+              {% set v = states(radiation_sensor) %}
+              {{ is_number(v) and (v | float) < (yellow_threshold | float) }}
+          - variables:
+              reading_text: >-
+                {{ states(radiation_sensor) | float(0) | round(3) }} {{ unit }}
+              direction_ar: >-
+                {% set c = states(radiation_sensor) | float(0) %}
+                {% if c < (new_value | float) or (new_value | float) < (old_value | float) %}
+                  ينخفض 📉
+                {% else %}
+                  ثابت ➡️
+                {% endif %}
+              direction_en: >-
+                {% set c = states(radiation_sensor) | float(0) %}
+                {% if c < (new_value | float) or (new_value | float) < (old_value | float) %}
+                  falling 📉
+                {% else %}
+                  stable ➡️
+                {% endif %}
+              alert_title: >-
+                {{ '✅ عودة القراءة إلى المنطقة الخضراء' if language == 'ar' else '✅ Radiation Reading Back to Green Zone' }}
+              alert_message: >-
+                {% if language == 'ar' %}
+                  عادت قراءة الإشعاع إلى {{ reading_text }}. القراءة الآن أقل من حد المنطقة الصفراء بعد اكتمال مدة التأكيد. اتجاه القراءة: {{ direction_ar | trim }}.
+                {% else %}
+                  Radiation reading returned to {{ reading_text }}. The reading is now below the yellow threshold after the confirmation time. Trend: {{ direction_en | trim }}.
+                {% endif %}
+              tts_language: >-
+                {{ arabic_tts_language if language == 'ar' else english_tts_language }}
+              quiet_now: >-
+                {% if not (quiet_hours_enabled | bool) %}
+                  false
+                {% else %}
+                  {% set current = now().strftime('%H:%M:%S') %}
+                  {% set start = (quiet_start | string)[0:8] %}
+                  {% set finish = (quiet_end | string)[0:8] %}
+                  {% if start < finish %}
+                    {{ start <= current < finish }}
+                  {% else %}
+                    {{ current >= start or current < finish }}
+                  {% endif %}
+                {% endif %}
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ home_assistant_notification | bool }}
+            then:
+              - action: notify.persistent_notification
+                data:
+                  title: "{{ alert_title }}"
+                  message: "{{ alert_message }}"
+                  data:
+                    notification_id: nuclear_radiation_safety_monitor
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ notification_entities | length > 0 }}
+            then:
+              - action: notify.send_message
+                continue_on_error: true
+                target:
+                  entity_id: !input notification_entities
+                data:
+                  title: "{{ alert_title }}"
+                  message: "{{ alert_message }}"
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ voice_enabled | bool and not (quiet_now | bool) }}
+            then:
+              - if:
+                  - condition: template
+                    value_template: >-
+                      {{ alexa_notify_entities | length > 0 }}
+                then:
+                  - action: notify.send_message
+                    continue_on_error: true
+                    target:
+                      entity_id: !input alexa_notify_entities
+                    data:
+                      message: "{{ alert_message }}"
+              - if:
+                  - condition: template
+                    value_template: >-
+                      {{ google_home_players | length > 0 and tts_target | length > 0 }}
+                then:
+                  - repeat:
+                      for_each: !input google_home_players
+                      sequence:
+                        - action: tts.speak
+                          continue_on_error: true
+                          target: !input tts_target
+                          data:
+                            media_player_entity_id: "{{ repeat.item }}"
+                            message: "{{ alert_message }}"
+                            language: "{{ tts_language }}"
+
+mode: parallel
+max: 20
+max_exceeded: silent
